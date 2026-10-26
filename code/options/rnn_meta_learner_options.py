@@ -5,8 +5,8 @@ from typing import Literal
 import torch.nn.functional as functional
 from options.meta_learner_options import chemicalEnum, optimizerEnum
 from synapses.complex_rnn import ComplexRnn
-from synapses.fast_rnn import FastRnn
-from synapses.kernel_rnn import KernelRnn
+#from synapses.fast_rnn import FastRnn
+#from synapses.kernel_rnn import KernelRnn
 
 
 def pass_through(input):
@@ -26,8 +26,8 @@ class rnnModelEnum(Enum):
     """
 
     complex = ComplexRnn
-    kernel = KernelRnn
-    fast = FastRnn
+    #kernel = KernelRnn
+    #fast = FastRnn
 
 
 class errorEnum(Enum):

@@ -518,7 +518,7 @@ def jax_runner(index: int, result_subdirectory: str, modelPath: str):
 
     # -- options
     modelOptions = None
-    modelOptions = fastRnnOptions(
+    '''modelOptions = fastRnnOptions(
         nonLinear=JaxActivationNonLinearEnum.tanh,
         update_rules=[0, 1, 2, 3, 4, 9, 12],
         minSlowTau=2,
@@ -526,7 +526,7 @@ def jax_runner(index: int, result_subdirectory: str, modelPath: str):
         y_vector=yVectorEnum.none,
         z_vector=zVectorEnum.default,
         operator=operatorEnum.mode_9,
-    )
+    )'''
     # cuda:1
     # device = "cpu"
     current_dir = os.getcwd()
@@ -587,6 +587,6 @@ def main_jax_runner():
             for index_outer in range(0, 30):
                 jax_runner(
                     index=index_outer,
-                    result_subdirectory="runner_13_chem_DSEF_full_sweep_200_lisa_8/" + tau + "/" + tau2,
+                    result_subdirectory="runner_13_chem_DSEF_full_sweep_200_lisa_9/" + tau + "/" + tau2,
                     modelPath=inner2,
                 )

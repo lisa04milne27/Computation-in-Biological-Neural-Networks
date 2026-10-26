@@ -2,12 +2,12 @@ import datetime
 from enum import Enum
 from typing import Literal
 
-from synapses.benna_synapse import BennaSynapse
+#from synapses.benna_synapse import BennaSynapse
 from synapses.complex_synapse import ComplexSynapse
-from synapses.GRU_synapse import GRUSynapse
-from synapses.individual_synapse import IndividualSynapse
-from synapses.LSTM_synapse import LSTMSynapse
-from synapses.reservoir_synapse import ReservoirSynapse
+#from synapses.GRU_synapse import GRUSynapse
+#from synapses.individual_synapse import IndividualSynapse
+#from synapses.LSTM_synapse import LSTMSynapse
+#from synapses.reservoir_synapse import ReservoirSynapse
 
 
 class schedulerEnum(Enum):
@@ -27,11 +27,11 @@ class optimizerEnum(Enum):
 
 class modelEnum(Enum):
     complex = ComplexSynapse
-    reservoir = ReservoirSynapse
-    individual = IndividualSynapse
-    benna = BennaSynapse
-    lstm = LSTMSynapse
-    gru = GRUSynapse
+    #reservoir = ReservoirSynapse
+    #individual = IndividualSynapse
+    #benna = BennaSynapse
+    #lstm = LSTMSynapse
+    #gru = GRUSynapse
 
 
 class chemicalEnum(Enum):
