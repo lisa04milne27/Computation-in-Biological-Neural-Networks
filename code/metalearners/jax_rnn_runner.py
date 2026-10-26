@@ -587,6 +587,6 @@ def main_jax_runner():
             for index_outer in range(0, 30):
                 jax_runner(
                     index=index_outer,
-                    result_subdirectory="runner_13_chem_DSEF_full_sweep_200_lisa/" + tau + "/" + tau2,
+                    result_subdirectory="runner_13_chem_DSEF_full_sweep_200_lisa_8/" + tau + "/" + tau2,
                     modelPath=inner2,
                 )

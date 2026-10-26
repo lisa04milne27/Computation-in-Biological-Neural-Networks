@@ -17,7 +17,7 @@ from misc.dataset import (
     IMDBWord2VecDataProcess,
     IMDBWord2VecMetaDataset,
 )
-from misc.sofo_api import ggn_ce, jmp, sample_v
+#from misc.sofo_api import ggn_ce, jmp, sample_v
 from misc.utils import Plot, accuracy, log
 from nn.jax_chemical_nn import JAXFeedforwardNN
 from nn.jax_chemical_rnn import JAXChemicalRNN
