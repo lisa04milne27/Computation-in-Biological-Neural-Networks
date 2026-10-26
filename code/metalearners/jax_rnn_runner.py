@@ -209,11 +209,15 @@ class JaxMetaLearnerRNN:
             x_qry, self.jaxMetaLearnerOptions.number_of_time_steps, new_rnn
         )
 
-        qry_predictions = qry_predictions[:, -1, :]
-        one_hot_targets = jax.nn.one_hot(y_qry.flatten(), num_classes=self.jaxMetaLearnerOptions.output_size)
+        # Shape is (tasks, examples, time_steps, classes). Select the final
+        # recurrent output, then flatten task/example axes to match y_qry.
+        qry_predictions = qry_predictions[:, :, -1, :]
+        qry_predictions = qry_predictions.reshape((-1, self.jaxMetaLearnerOptions.output_size))
+        query_labels = y_qry.reshape((-1,))
+        one_hot_targets = jax.nn.one_hot(query_labels, num_classes=self.jaxMetaLearnerOptions.output_size)
         losses = self.loss_function(qry_predictions, one_hot_targets)
         avg_loss = jnp.mean(losses)
-        acc = accuracy(qry_predictions, y_qry.ravel(), use_jax=True)
+        acc = accuracy(qry_predictions, query_labels, use_jax=True)
 
         return avg_loss, acc
 
