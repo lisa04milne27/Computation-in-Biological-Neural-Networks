@@ -1,4 +1,0 @@
-Train Episode: 1	Loss: 4.901373	Accuracy: 0.000	Current Training Data: 5	Number of Tasks: 1	Loss 2: 4.277552	Accuracy 2: 0.190	Current Training Data Per Class 2: 10 	Number of Tasks 2: 1	 Total loss: 4.589462	 Total Accuracy: 0.095
-Train Episode: 2	Loss: 10.756715	Accuracy: 0.000	Current Training Data: 17	Number of Tasks: 1	Loss 2: 7.459269	Accuracy 2: 0.220	Current Training Data Per Class 2: 27 	Number of Tasks 2: 1	 Total loss: 9.107992	 Total Accuracy: 0.110
-Train Episode: 3	Loss: 3.902866	Accuracy: 0.200	Current Training Data: 32	Number of Tasks: 1	Loss 2: 4.059696	Accuracy 2: 0.000	Current Training Data Per Class 2: 38 	Number of Tasks 2: 1	 Total loss: 3.981281	 Total Accuracy: 0.100
-Train Episode: 4	Loss: nan	Accuracy: 0.000	Current Training Data: 5	Number of Tasks: 1	Loss 2: nan	Accuracy 2: 0.000	Current Training Data Per Class 2: 6 	Number of Tasks 2: 1	 Total loss: nan	 Total Accuracy: 0.000

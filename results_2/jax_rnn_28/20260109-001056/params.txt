@@ -1,4 +1,0 @@
-Train Episode: 1	Loss: 3.185165	Accuracy: 0.500	Grad Norm: 1531056488448.000000	Training/Class: 62
-Train Episode: 2	Loss: 5.428078	Accuracy: 0.500	Grad Norm: 15565995021634109440.000000	Training/Class: 55
-Train Episode: 3	Loss: 8.773460	Accuracy: 0.500	Grad Norm: nan	Training/Class: 24
-Train Episode: 4	Loss: nan	Accuracy: 0.500	Grad Norm: nan	Training/Class: 11

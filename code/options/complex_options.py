@@ -1,24 +1,15 @@
 from enum import Enum
 from typing import Union
 
-from torch.nn import functional
-
+import jax
 
 def pass_through(input):
     return input
 
 
 class nonLinearEnum(Enum):
-    tanh = functional.tanh
-    gelu = (
-        functional.gelu
-    )  # No idea why this is not working but manually setting it to functional.gelu in the code works????
-    relu = functional.relu
-    sigmoid = functional.sigmoid
-    elu = functional.elu
-    leaky_relu = functional.leaky_relu
+    tanh = jax.nn.tanh
     pass_through = pass_through
-    softplus = functional.softplus
 
 
 class pMatrixEnum(Enum):

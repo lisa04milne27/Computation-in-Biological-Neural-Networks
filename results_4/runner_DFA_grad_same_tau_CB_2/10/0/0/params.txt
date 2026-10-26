@@ -1,5 +1,0 @@
-Runner Episode: 1	Loss: nan	Accuracy: 0.000 	 Current Training Data Per Class: 40	Loss_2: nan	Accuracy_2: 0.000	 Current Training Data Per Class_2: 0
-Runner Episode: 2	Loss: nan	Accuracy: 0.400 	 Current Training Data Per Class: 40	Loss_2: nan	Accuracy_2: 0.000	 Current Training Data Per Class_2: 0
-Runner Episode: 3	Loss: nan	Accuracy: 0.000 	 Current Training Data Per Class: 40	Loss_2: nan	Accuracy_2: 0.000	 Current Training Data Per Class_2: 0
-Runner Episode: 4	Loss: nan	Accuracy: 0.000 	 Current Training Data Per Class: 40	Loss_2: nan	Accuracy_2: 0.000	 Current Training Data Per Class_2: 0
-Runner Episode: 5	Loss: nan	Accuracy: 0.000 	 Current Training Data Per Class: 40	Loss_2: nan	Accuracy_2: 0.000	 Current Training Data Per Class_2: 0

@@ -106,7 +106,7 @@ class JAXFastRnn(eqx.Module):
         if self.fastRnnOptions.operator == operatorEnum.mode_7:
             new_synaptic_norms = jnp.linalg.norm(
                 new_synaptic_weight, axis=1, ord=2
-            )  # in jax it's in, out not out, in like pytorch
+            )
             new_synaptic_weight = new_synaptic_weight / (new_synaptic_norms[:, None, :] + 1e-8)
 
         v_vector_softmax = jax.nn.softmax(self.v_vector)

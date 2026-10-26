@@ -1,7 +1,6 @@
 from enum import Enum
 
 import jax
-from options.meta_learner_options import chemicalEnum
 
 
 def pass_through(input):
@@ -39,7 +38,7 @@ class JaxRnnMetaLearnerOptions:
         metaLearningRate: float = 0.001,
         numberOfClasses: int = 5,
         dataset_name: str = "emnist",
-        chemicalInitialization: chemicalEnum = chemicalEnum.same,
+        chemicalInitialization="same",
         minTrainingDataPerClass: int = 5,
         maxTrainingDataPerClass: int = 10,
         queryDataPerClass: int = 10,

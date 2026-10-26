@@ -1,2 +1,0 @@
-Train Episode: 1	Loss: 0.833083	Accuracy: 0.570	Current Training Data: 42	Number of Tasks: 1
-Train Episode: 2	Loss: 1.181834	Accuracy: 0.540	Current Training Data: 20	Number of Tasks: 1

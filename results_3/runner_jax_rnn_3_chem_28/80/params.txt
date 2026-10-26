@@ -1,6 +1,0 @@
-Runner Episode: 1	Loss: 2.138570	Accuracy: 0.280	Training/Class: 80
-Runner Episode: 2	Loss: 2.912274	Accuracy: 0.200	Training/Class: 80
-Runner Episode: 3	Loss: 1.790002	Accuracy: 0.450	Training/Class: 80
-Runner Episode: 4	Loss: 2.870861	Accuracy: 0.340	Training/Class: 80
-Runner Episode: 5	Loss: 0.696933	Accuracy: 0.760	Training/Class: 80
-Runner Episode: 6	Loss: 2.772382	Accuracy: 0.220	Training/Class: 80

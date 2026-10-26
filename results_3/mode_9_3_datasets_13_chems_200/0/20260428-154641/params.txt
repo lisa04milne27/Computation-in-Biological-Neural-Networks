@@ -1,1 +1,0 @@
-Train Episode: 1	Loss: 3.825510	Accuracy: 0.010	Current Training Data: 5	Number of Tasks: 1	Loss 2: 2.636314	Acc 2: 0.270	CTD \ Class 2: 10 	Number of Tasks 2: 1	Loss 3: 1.691140	Acc 3: 0.650	CTD \ Class 3: 17 	Number of Tasks 3: 1	 Total loss: 2.717655	 Total Acc: 0.310
