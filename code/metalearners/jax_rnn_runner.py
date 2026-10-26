@@ -139,12 +139,15 @@ class JaxMetaLearnerRNN:
         x, label = input
 
         number_of_time_steps = self.jaxMetaLearnerOptions.number_of_time_steps
-        # The data pipeline supplies labels with a trailing singleton axis
-        # (and can also retain a leading task axis). This scan item is one
-        # example, so remove only singleton dimensions before repeating it.
-        x = jnp.reshape(x, (number_of_time_steps, -1))
-        label = jnp.squeeze(label)
-        label = jnp.broadcast_to(label, (number_of_time_steps,))
+        # The outer scan item is one complete task (all examples in the
+        # task), not a single image. Flatten the task/example axes while
+        # preserving the image feature dimension, then scan over examples.
+        x = jnp.reshape(x, (-1, number_of_time_steps, self.jaxMetaLearnerOptions.input_size))
+        label = jnp.reshape(label, (-1,))
+        x = jnp.reshape(x, (-1, self.jaxMetaLearnerOptions.input_size))
+        # Labels are class indices for each example. Repeat each label only
+        # when an image itself is split into multiple recurrent time steps.
+        label = jnp.repeat(label, number_of_time_steps)
 
         (new_synaptic_weights, new_parameters, new_rnn, hidden_state, metaOptimizer), y = jax.lax.scan(
             self.inner_loop_per_image,
@@ -160,8 +163,15 @@ class JaxMetaLearnerRNN:
         return (hidden_state, rnn), y
 
     def full_inner_loop_no_update(self, x, number_of_timesteps, rnn):
-        x = jnp.reshape(x, (x.shape[0], number_of_timesteps, -1))
-        predict = lambda sequence: jax.vmap(lambda step: rnn(step, None, None)[0])(sequence)
+        # DataProcess supplies (tasks, examples, flattened_pixels). Match the
+        # training path: partition pixels into recurrent steps only when the
+        # configured step count requires it. With one step, each input remains
+        # the full 784-feature image expected by forward1.
+        input_size = self.jaxMetaLearnerOptions.input_size
+        x = jnp.reshape(x, (x.shape[0], x.shape[1], number_of_timesteps, input_size))
+        predict = lambda sequence: jax.vmap(
+            lambda steps: jax.vmap(lambda step: rnn(step, None, None)[0])(steps)
+        )(sequence)
         return jax.vmap(predict)(x)
 
     # @eqx.filter_jit
