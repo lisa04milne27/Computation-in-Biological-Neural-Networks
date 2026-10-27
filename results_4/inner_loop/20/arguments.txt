@@ -16,7 +16,7 @@ output_size: 47
 biological_min_tau: 1
 biological_max_tau: 28
 gradient: True
-outer_activation: <PjitFunction of <function tanh at 0x00000153EDE04360>>
+outer_activation: <PjitFunction of <function tanh at 0x0000016CE6324360>>
 recurrent_activation: JaxActivationNonLinearEnum.softplus
 number_of_time_steps: 1
 load_model: C:\Users\lisam\Lisa\2B\Project\Computation-in-Biological-Neural-Networks\results_4\Jax_13_chem_DSEF_full_sweep_200\1\400
@@ -34,7 +34,7 @@ sofo_damping: 1e-05
 sofo_identity_sampling: False
 batch_size: 1
 random_architectures: False
-nonLinear: <PjitFunction of <function tanh at 0x00000153EDE04360>>
+nonLinear: <PjitFunction of <function tanh at 0x0000016CE6324360>>
 update_rules: (0, 1, 2, 3, 4, 9, 12)
 minSlowTau: 2
 maxSlowTau: 50

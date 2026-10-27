@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 from typing import Optional
-
 import equinox as eqx
 import jax
 import jax.numpy as jnp
