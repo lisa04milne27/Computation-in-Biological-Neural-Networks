@@ -75,7 +75,9 @@ class JaxMetaLearnerRNN:
                 + "/"
                 + str(self.jaxMetaLearnerOptions.minTrainingDataPerClass)
             )
-            os.makedirs(self.result_directory, exist_ok=False)
+            # Reuse an existing run directory so rerunning the documented
+            # entry point does not fail before training starts.
+            os.makedirs(self.result_directory, exist_ok=True)
             with open(self.result_directory + "/arguments.txt", "w") as f:
                 f.writelines(str(self.jaxMetaLearnerOptions))
                 f.writelines(str(modelOptions))
@@ -162,18 +164,6 @@ class JaxMetaLearnerRNN:
             (x, label),
         )
     
-        # --- Index a Single Post-Synaptic Neuron ---
-        # Let's target Neuron #0 in Layer 1 (out_features dimension):
-        target_neuron_idx = 0
-    
-        # errors_history shape after scan: (N_steps, 170) -> extract neuron 0 across all steps
-        neuron_errors = errors_history[:, target_neuron_idx]  # Shape: (N_steps,)
-    
-        # h_history shape: (N_steps, 13, 784, 170) 
-        # Average across all incoming 784 pre-synaptic inputs for neuron 0:
-        neuron_h = jnp.mean(h_history[:, :, :, target_neuron_idx], axis=2)  # Shape: (N_steps, 13)
-
-
         return (new_synaptic_weights, new_parameters, new_rnn, metaOptimizer), (y, hidden_state)
 
     def inner_loop_per_image_no_update(self, carry, input):
@@ -260,124 +250,82 @@ class JaxMetaLearnerRNN:
 
         return loss, acc
 
+
+    def train(self):
+       current_training_data_per_class = None
+    
+       for eps, data in enumerate(self.metaTrainingDataset):
+
+           x_trn, y_trn, x_qry, y_qry, current_training_data_per_class, _ = self.data_process(
+               data, self.jaxMetaLearnerOptions.numberOfClasses
+           )
+           # -- convert to jax arrays --
+           x_trn = jnp.array(x_trn)
+           y_trn = jnp.array(y_trn)
+           x_qry = jnp.array(x_qry)
+           y_qry = jnp.array(y_qry)
+
+           # -- weight initialization --
+           self.rnn = self.rnn.reset_weights(self.key2)
+
+           # -- initialize chemicals --
+           self.chemicals_init()
+           new_parameters = list(self.rnn.layers)
+           new_synaptic_weights = list(self.synaptic_weights)
+           for idx, parameter in enumerate(self.rnn.layers):
+               synaptic_weight = self.synaptic_weights[idx]
+               new_synaptic_weight, new_parameter = self.metaOptimizer.initialize_parameters(
+                   synaptic_weight, parameter
+               )
+               new_synaptic_weights[idx] = new_synaptic_weight
+               new_parameters[idx] = new_parameter
+           self.synaptic_weights = tuple(new_synaptic_weights)
+           self.new_parameters = tuple(new_parameters)
+           num_layers = len(self.new_parameters)
+           self.rnn = eqx.tree_at(
+               lambda r: (r.layers, *(getattr(r, f"forward{i+1}") for i in range(num_layers))),
+               self.rnn,
+               (self.new_parameters, *self.new_parameters),
+           )
+
+        # -- meta-optimization --
+           loss, acc = self.make_step(
+               self.metaOptimizer,
+               self.synaptic_weights,
+               self.rnn.layers,
+               self.rnn,
+               x_trn,
+               y_trn,
+               x_qry,
+               y_qry,
+           )
+
+           if self.save_results:
+               log([loss.item()], self.result_directory + "/loss_meta.txt")
+               log([acc], self.result_directory + "/acc_meta.txt")
+
+           line = "Runner Episode: {}\tLoss: {:.6f}\tAccuracy: {:.3f}\tTraining/Class: {}".format(
+               eps + 1, loss.item(), acc, current_training_data_per_class
+        )
+           if self.jaxMetaLearnerOptions.display:
+               print(line)
+
+           if self.save_results:
+
+               with open(self.result_directory + "/params.txt", "a") as f:
+                   f.writelines(line + "\n")
+
+       if self.save_results:
+           self.plot()
+           # -- save model --
+           eqx.tree_serialise_leaves(self.result_directory + "/meta_learner_model.eqx", self.metaOptimizer)
+
+       print("Training completed.")
+
+
 import matplotlib.pyplot as plt
 import numpy as np
 
-def train(self):
-    current_training_data_per_class = None
-    
-    for eps, data in enumerate(self.metaTrainingDataset):
-
-        x_trn, y_trn, x_qry, y_qry, current_training_data_per_class, _ = self.data_process(
-            data, self.jaxMetaLearnerOptions.numberOfClasses
-        )
-        # -- convert to jax arrays --
-        x_trn = jnp.array(x_trn)
-        y_trn = jnp.array(y_trn)
-        x_qry = jnp.array(x_qry)
-        y_qry = jnp.array(y_qry)
-
-        # -- weight initialization --
-        self.rnn = self.rnn.reset_weights(self.key2)
-
-        # -- initialize chemicals --
-        self.chemicals_init()
-        new_parameters = list(self.rnn.layers)
-        new_synaptic_weights = list(self.synaptic_weights)
-        for idx, parameter in enumerate(self.rnn.layers):
-            synaptic_weight = self.synaptic_weights[idx]
-            new_synaptic_weight, new_parameter = self.metaOptimizer.initialize_parameters(
-                synaptic_weight, parameter
-            )
-            new_synaptic_weights[idx] = new_synaptic_weight
-            new_parameters[idx] = new_parameter
-        self.synaptic_weights = tuple(new_synaptic_weights)
-        self.new_parameters = tuple(new_parameters)
-        num_layers = len(self.new_parameters)
-        self.rnn = eqx.tree_at(
-            lambda r: (r.layers, *(getattr(r, f"forward{i+1}") for i in range(num_layers))),
-            self.rnn,
-            (self.new_parameters, *self.new_parameters),
-        )
-
-        # =========================================================================
-        # 1. EXTRACT SINGLE NEURON TRAJECTORIES ACROSS ALL TRAINING IMAGES
-        # =========================================================================
-        carry_init = (
-            self.synaptic_weights,
-            self.rnn.layers,
-            self.rnn,
-            self.metaOptimizer,
-        )
-
-        # Run full_inner_loop to get (y, neuron_errors, neuron_h)
-        _, (y_hist, neuron_errors, neuron_h) = self.full_inner_loop(
-            carry_init, (x_trn[0], y_trn[0])
-        )
-
-        # Convert JAX arrays to NumPy for plotting
-        errors_np = np.array(neuron_errors) # Shape: (400,) for 80 imgs/class
-        h_np = np.array(neuron_h)            # Shape: (400, 13) for 13 chemicals
-
-        # Generate and save the plot for Episode 1
-        if eps == 0:
-            fig, axes = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
-
-            # Panel 1: Error Signal
-            axes[0].plot(errors_np, color='crimson', label='Post-synaptic Error')
-            axes[0].set_ylabel('Error Value')
-            axes[0].set_title('Scalar/DSEF Error Signal Received by Neuron 0 (Layer 1)')
-            axes[0].grid(True)
-
-            # Panel 2: 13 Chemical State Variables
-            for chem_idx in range(self.numberOfChemicals):
-                axes[1].plot(h_np[:, chem_idx], label=f'Chemical Variable {chem_idx+1}')
-
-            axes[1].set_xlabel('Training Step (Image Index)')
-            axes[1].set_ylabel('Chemical State Value (h)')
-            axes[1].set_title(f'Evolution of {self.numberOfChemicals} Chemical State Variables Over Training')
-            axes[1].legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-            axes[1].grid(True)
-
-            plt.tight_layout()
-            plt.savefig("neuron_dynamics_80_images.png", bbox_inches="tight")
-            plt.show()
-            print("Successfully saved 'neuron_dynamics_80_images.png'.")
-        # =========================================================================
-
-        # -- meta-optimization --
-        loss, acc = self.make_step(
-            self.metaOptimizer,
-            self.synaptic_weights,
-            self.rnn.layers,
-            self.rnn,
-            x_trn,
-            y_trn,
-            x_qry,
-            y_qry,
-        )
-
-        if self.save_results:
-            log([loss.item()], self.result_directory + "/loss_meta.txt")
-            log([acc], self.result_directory + "/acc_meta.txt")
-
-        line = "Runner Episode: {}\tLoss: {:.6f}\tAccuracy: {:.3f}\tTraining/Class: {}".format(
-            eps + 1, loss.item(), acc, current_training_data_per_class
-        )
-        if self.jaxMetaLearnerOptions.display:
-            print(line)
-
-        if self.save_results:
-
-            with open(self.result_directory + "/params.txt", "a") as f:
-                f.writelines(line + "\n")
-
-    if self.save_results:
-        self.plot()
-        # -- save model --
-        eqx.tree_serialise_leaves(self.result_directory + "/meta_learner_model.eqx", self.metaOptimizer)
-
-    print("Training completed.")
 
 
 def jax_runner(index: int, result_subdirectory: str, modelPath: str):
