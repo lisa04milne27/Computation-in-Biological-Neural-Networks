@@ -29,8 +29,9 @@ class JaxMetaLearnerRNN:
         key: jax.random.key,
         numberOfChemicals: int = 1,
         metaTrainingDataset: Optional[EmnistDataset] = None,
-        tracked_layer: int = 0,
-        tracked_neuron: int = 0,
+        #Changing this below
+        tracked_layer: int = 3,
+        tracked_neuron: int = 5,
         tracked_input_synapse: int = 0,
     ):
         self.jaxMetaLearnerOptions = jaxMetaLearnerOptions
