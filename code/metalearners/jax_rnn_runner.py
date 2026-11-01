@@ -30,9 +30,9 @@ class JaxMetaLearnerRNN:
         numberOfChemicals: int = 1,
         metaTrainingDataset: Optional[EmnistDataset] = None,
         #Changing this below
-        tracked_layer: int = 3,
-        tracked_neuron: int = 5,
-        tracked_input_synapse: int = 0,
+        tracked_layer: int = 4,
+        tracked_neuron: int = 46,
+        tracked_input_synapse: int = 8,
     ):
         self.jaxMetaLearnerOptions = jaxMetaLearnerOptions
         key1, key2 = jax.random.split(key)
@@ -138,9 +138,11 @@ class JaxMetaLearnerRNN:
         # Synaptic state shape is (chemicals, input_synapses, output_neurons).
         # Save all seven chemical values for every incoming synapse to the
         # selected neuron, immediately after this training image's update.
+        # Each layer's chemical state is (chemicals, input_synapses, output_neurons).
+        # Keep one exact synapse: input index -> selected output neuron.
         tracked_chemicals = new_synaptic_weights[self.tracked_layer][
-            :, :, self.tracked_neuron
-        ].T
+            :, self.tracked_input_synapse, self.tracked_neuron
+        ]
 
         return (
             new_synaptic_weights,
@@ -331,42 +333,47 @@ class JaxMetaLearnerRNN:
        print("Training completed.")
 
     def save_neuron_chemical_plot(self, chemical_history, episode: int):
-        """Plot all seven chemical values for one synapse across images."""
+        """Plot each chemical on the selected input-to-neuron synapse over images."""
         history = np.asarray(chemical_history)
-        # One task is the expected configuration. If several are present,
-        # plot the first task to keep the x-axis as its ordered images.
-        if history.ndim == 4:
+        # The scan is vmapped over tasks; this runner uses one task per episode.
+        if history.ndim == 3:
             history = history[0]
-        # Expected shape: (training_images, incoming_synapses, chemicals).
-        if history.ndim != 3 or history.shape[-1] != self.numberOfChemicals:
-            raise ValueError(f"Expected (images, synapses, chemicals), got {history.shape}")
-        if not 0 <= self.tracked_input_synapse < history.shape[1]:
+        # Expected shape: (training_images, chemicals).
+        if history.ndim != 2 or history.shape[-1] != self.numberOfChemicals:
+            raise ValueError(f"Expected (images, chemicals), got {history.shape}")
+
+        layer = self.rnn.layers[self.tracked_layer]
+        if not 0 <= self.tracked_input_synapse < layer.in_features:
             raise ValueError(
                 f"Incoming synapse {self.tracked_input_synapse} is out of range "
-                f"for layer {self.tracked_layer + 1} with {history.shape[1]} inputs"
+                f"for layer {self.tracked_layer + 1} with {layer.in_features} inputs"
+            )
+        if not 0 <= self.tracked_neuron < layer.out_features:
+            raise ValueError(
+                f"Tracked neuron {self.tracked_neuron} is out of range "
+                f"for layer {self.tracked_layer + 1} with {layer.out_features} neurons "
+                f"(valid zero-based indexes: 0 to {layer.out_features - 1})"
             )
 
-        selected_synapse = history[:, self.tracked_input_synapse, :]
         csv_path = os.path.join(
             self.result_directory,
             f"neuron_synapse_chemicals_episode_{episode:04d}.csv",
         )
         with open(csv_path, "w", newline="") as csv_file:
-            csv_file.write("training_image,incoming_synapse,chemical,_value\n")
+            csv_file.write("training_image,input_synapse,output_neuron,chemical,value\n")
             for image_index in range(history.shape[0]):
-                for synapse_index in range(history.shape[1]):
-                    for chemical_index in range(history.shape[2]):
-                        csv_file.write(
-                            f"{image_index + 1},{synapse_index + 1},{chemical_index + 1},"
-                            f"{history[image_index, synapse_index, chemical_index]:.10g}\n"
-                        )
-        images = np.arange(1, selected_synapse.shape[0] + 1)
+                for chemical_index in range(history.shape[1]):
+                    csv_file.write(
+                        f"{image_index + 1},{self.tracked_input_synapse},{self.tracked_neuron},"
+                        f"{chemical_index},{history[image_index, chemical_index]:.10g}\n"
+                    )
+        images = np.arange(1, history.shape[0] + 1)
         fig, ax = plt.subplots(figsize=(11, 6))
-        for chemical in range(selected_synapse.shape[1]):
-            ax.plot(images, selected_synapse[:, chemical], label=f"Chemical {chemical + 1}")
+        for chemical in range(history.shape[1]):
+            ax.plot(images, history[:, chemical], label=f"Chemical {chemical}")
         ax.set_title(
-            f"Layer {self.tracked_layer + 1}, neuron {self.tracked_neuron + 1}, "
-            f"incoming synapse {self.tracked_input_synapse + 1}: chemical values "
+            f"Layer {self.tracked_layer} (zero-based), neuron {self.tracked_neuron}, "
+            f"input synapse {self.tracked_input_synapse}: chemical values "
             f"after each training image (episode {episode})"
         )
         ax.set_xlabel("Training image")
@@ -382,6 +389,8 @@ class JaxMetaLearnerRNN:
         plt.close(fig)
 
 
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -411,6 +420,7 @@ def jax_runner(index: int, result_subdirectory: str, modelPath: str):
         queryDataPerClass=queryDataPerClass,
         dimensionOfImage=28,
     )
+    #dimOut is 47 because there are 47 classes in the EMNIST dataset. dimIn is 784 because the images are 28x28 pixels, and we divide by numberOfTimeSteps (which is 1 here) to get the input size for the RNN.
     dimOut = 47
     dimIn = int(28 * 28 / numberOfTimeSteps)
 
