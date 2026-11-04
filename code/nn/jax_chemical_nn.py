@@ -158,7 +158,7 @@ class JAXFeedforwardNN(eqx.Module):
         y = self.forward5(h4)
 
         if label is None:
-            return y, None, None, None
+            return y, None, None, None, None
         
         softmax_y = jax.nn.softmax(y)
 
@@ -168,11 +168,10 @@ class JAXFeedforwardNN(eqx.Module):
         elif self.error_type == JaxErrorTypeEnum.DSEF:
             label_index = jnp.argmax(label, axis=-1, keepdims=True)
             y_index = jnp.take_along_axis(softmax_y, label_index, axis=-1)
-            error = jax.lax.cond(
-                jnp.squeeze(y_index) > 0.5,
-                lambda: jnp.zeros_like(label_index, dtype=jnp.float32),
-                lambda: jnp.ones_like(label_index, dtype=jnp.float32),
-            )
+            scaler_error = (jnp.squeeze(y_index) <= 0.5).astype(jnp.float32)
+            error = scaler_error
+        else:
+            scaler_error = jnp.array(0.0, dtype=jnp.float32)
 
         # -- Stop Gradients for Feedbacks --
         w_fb1 = jax.lax.stop_gradient(self.feedback1.weight)
@@ -223,4 +222,4 @@ class JAXFeedforwardNN(eqx.Module):
         errors_arr = [(err1, err2), (err2, err3), (err3, err4), (err4, err5), (err5, err6)]
 
         # Returns `y`, `h_new` (None for FNN), `activations`, `errors`
-        return y, None, activations_arr, errors_arr
+        return y, None, activations_arr, errors_arr, scaler_error, jnp.squeeze(y_index) if self.error_type == JaxErrorTypeEnum.DSEF else jnp.array(0.0)
