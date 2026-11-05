@@ -33,6 +33,7 @@ class JaxMetaLearnerRNN:
         tracked_layer: int = 3,
         tracked_neuron: int = 40,
         tracked_input_synapse: int = 8,
+        weight_sample_blocksize: int = 20,
     ):
         self.jaxMetaLearnerOptions = jaxMetaLearnerOptions
         key1, key2 = jax.random.split(key)
@@ -53,6 +54,7 @@ class JaxMetaLearnerRNN:
         self.tracked_layer = tracked_layer
         self.tracked_neuron = tracked_neuron
         self.tracked_input_synapse = tracked_input_synapse
+        self.weight_sample_blocksize = weight_sample_blocksize
         self.data_process = DataProcess(
             minTrainingDataPerClass=self.jaxMetaLearnerOptions.minTrainingDataPerClass,
             maxTrainingDataPerClass=self.jaxMetaLearnerOptions.maxTrainingDataPerClass,
@@ -95,6 +97,7 @@ class JaxMetaLearnerRNN:
 
     
     #Below is the list with the times (after this training image) that I want to record all the synaptic variables for all of the neurons!
+    @staticmethod
     def make_sample_list(numtrainingimages, blocksize):
         """Return zero-based image indexes at which weight snapshots are taken."""
         if numtrainingimages < 0 or blocksize <= 0:
@@ -118,7 +121,7 @@ class JaxMetaLearnerRNN:
         self.synaptic_weights = tuple(self.synaptic_weights)
 
     def inner_loop_per_image(self, carry, input):
-        synaptic_weights, parameters, rnn, hidden_state, metaOptimizer, step_idx = carry
+        synaptic_weights, parameters, rnn, hidden_state, metaOptimizer, step_idx, sample_slot = carry
         x, labels = input
 
         labels = jax.nn.one_hot(labels, num_classes=self.jaxMetaLearnerOptions.output_size)
@@ -143,24 +146,24 @@ class JaxMetaLearnerRNN:
             (new_parameters, *new_parameters),
         )
 
-        # Synaptic state shape is (chemicals, input_synapses, output_neurons).
-        # Save all seven chemical values for every incoming synapse to the
-        # selected neuron, immediately after this training image's update.
-        # Each layer's chemical state is (chemicals, input_synapses, output_neurons).
-        # Keep one exact synapse: input index -> selected output neuron.
+        # Keep the existing chemical-history diagnostic for one selected synapse.
         tracked_chemicals = new_synaptic_weights[self.tracked_layer][
             :, self.tracked_input_synapse, self.tracked_neuron
         ]
 
-        # Store the per-image change in this layer's weights (input x output).
-        tracked_weight_change = (
-            new_parameters[self.tracked_layer].weight.T
-            - parameters[self.tracked_layer].weight.T
+        is_sample_step = jnp.any(step_idx == self.weight_sample_indices)
+        sampled_weight_changes = tuple(
+            jax.lax.cond(
+                is_sample_step,
+                lambda new=new_parameter, old=old_parameter: new.weight.T - old_parameter.weight.T,
+                lambda new=new_parameter: jnp.zeros_like(new.weight.T),
+            )
+            for new_parameter, old_parameter in zip(new_parameters, parameters)
         )
+        sample_slot = sample_slot + is_sample_step.astype(jnp.int32)
 
-        new_carry = (new_synaptic_weights, new_parameters, new_rnn, hidden_state, metaOptimizer, step_idx + 1)
-    
-        return new_carry, (y, tracked_chemicals, scaler_error, correct_class_probability, tracked_weight_change)
+        new_carry = (new_synaptic_weights, new_parameters, new_rnn, hidden_state, metaOptimizer, step_idx + 1, sample_slot)
+        return new_carry, (y, tracked_chemicals, scaler_error, correct_class_probability, sampled_weight_changes)
 
     def full_inner_loop(self, carry, input) -> jnp.ndarray:
         synaptic_weights, parameters, rnn, metaOptimizer = carry
@@ -176,18 +179,24 @@ class JaxMetaLearnerRNN:
         # Labels are class indices for each example. Repeat each label only
         # when an image itself is split into multiple recurrent time steps.
         label = jnp.repeat(label, number_of_time_steps)
-        (new_synaptic_weights, new_parameters, new_rnn, hidden_state, metaOptimizer, _), (
+        self.weight_sample_indices = jnp.asarray(
+            self.make_sample_list(x.shape[0], self.weight_sample_blocksize), dtype=jnp.int32
+        )
+        (new_synaptic_weights, new_parameters, new_rnn, hidden_state, metaOptimizer, _, _), (
         y,
         tracked_chemicals,
         scaler_error,
         correct_class_probability,
-        weight_changes
+        weight_history
     ) = jax.lax.scan(
                 self.inner_loop_per_image,
-                (synaptic_weights, parameters, rnn, None, metaOptimizer, jnp.array(0)),
+                (synaptic_weights, parameters, rnn, None, metaOptimizer, jnp.array(0), jnp.array(0)),
                 (x, label),
          )
-
+        sample_indices = jnp.asarray(self.make_sample_list(x.shape[0], self.weight_sample_blocksize))
+        weight_changes = jax.tree_util.tree_map(
+            lambda history: history[sample_indices], weight_history
+        )
         return (
             new_synaptic_weights, 
             new_parameters, 
@@ -337,12 +346,29 @@ class JaxMetaLearnerRNN:
                log([loss.item()], self.result_directory + "/loss_meta.txt")
                log([acc], self.result_directory + "/acc_meta.txt")
                self.save_neuron_chemical_plot(tracked_chemicals, scaler_error, correct_class_probability, eps + 1)
-               # Array shape: (training images, input synapses, output neurons).
+               # Store only sampled changes, with layer first. Pad to the
+               # largest layer matrix and save true dimensions separately.
+               layer_changes = [np.asarray(layer_history[0]) for layer_history in weight_changes]
+               max_inputs = max(array.shape[1] for array in layer_changes)
+               max_outputs = max(array.shape[2] for array in layer_changes)
+               saved_weight_changes = np.zeros(
+                   (len(layer_changes), layer_changes[0].shape[0], max_inputs, max_outputs),
+                   dtype=layer_changes[0].dtype,
+               )
+               layer_shapes = np.asarray([array.shape[1:] for array in layer_changes], dtype=np.int32)
+               for layer_index, array in enumerate(layer_changes):
+                   saved_weight_changes[
+                       layer_index, :, : array.shape[1], : array.shape[2]
+                   ] = array
                np.save(
                    os.path.join(self.result_directory, f"weight_changes_episode_{eps + 1:04d}.npy"),
-                   np.asarray(weight_changes[0]),
+                   saved_weight_changes,
                )
-           self.weight_changes = weight_changes[0]
+               np.save(
+                   os.path.join(self.result_directory, f"weight_changes_episode_{eps + 1:04d}_layer_shapes.npy"),
+                   layer_shapes,
+               )
+           self.weight_changes = tuple(layer_history[0] for layer_history in weight_changes)
 
            line = "Runner Episode: {}\tLoss: {:.6f}\tAccuracy: {:.3f}\tTraining/Class: {}".format(
                eps + 1, loss.item(), acc, current_training_data_per_class
