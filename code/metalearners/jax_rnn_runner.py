@@ -34,6 +34,7 @@ class JaxMetaLearnerRNN:
         tracked_neuron: int = 40,
         tracked_input_synapse: int = 8,
         weight_sample_blocksize: int = 20,
+        bp_learning_rate: float = 0.01,
     ):
         self.jaxMetaLearnerOptions = jaxMetaLearnerOptions
         key1, key2 = jax.random.split(key)
@@ -55,6 +56,7 @@ class JaxMetaLearnerRNN:
         self.tracked_neuron = tracked_neuron
         self.tracked_input_synapse = tracked_input_synapse
         self.weight_sample_blocksize = weight_sample_blocksize
+        self.bp_learning_rate = bp_learning_rate
         self.data_process = DataProcess(
             minTrainingDataPerClass=self.jaxMetaLearnerOptions.minTrainingDataPerClass,
             maxTrainingDataPerClass=self.jaxMetaLearnerOptions.maxTrainingDataPerClass,
@@ -160,10 +162,19 @@ class JaxMetaLearnerRNN:
             )
             for new_parameter, old_parameter in zip(new_parameters, parameters)
         )
+        bp_delta_weights = compute_bp_delta_w(rnn, x, labels, learning_rate=self.bp_learning_rate)
+        sampled_bp_weight_changes = tuple(
+            jax.lax.cond(
+                is_sample_step,
+                lambda delta=delta: delta,
+                lambda delta=delta: jnp.zeros_like(delta),
+            )
+            for delta in bp_delta_weights
+        )
         sample_slot = sample_slot + is_sample_step.astype(jnp.int32)
 
         new_carry = (new_synaptic_weights, new_parameters, new_rnn, hidden_state, metaOptimizer, step_idx + 1, sample_slot)
-        return new_carry, (y, tracked_chemicals, scaler_error, correct_class_probability, sampled_weight_changes)
+        return new_carry, (y, tracked_chemicals, scaler_error, correct_class_probability, sampled_weight_changes, sampled_bp_weight_changes)
 
     def full_inner_loop(self, carry, input) -> jnp.ndarray:
         synaptic_weights, parameters, rnn, metaOptimizer = carry
@@ -187,7 +198,8 @@ class JaxMetaLearnerRNN:
         tracked_chemicals,
         scaler_error,
         correct_class_probability,
-        weight_history
+        weight_history,
+        bp_weight_history
     ) = jax.lax.scan(
                 self.inner_loop_per_image,
                 (synaptic_weights, parameters, rnn, None, metaOptimizer, jnp.array(0), jnp.array(0)),
@@ -197,12 +209,15 @@ class JaxMetaLearnerRNN:
         weight_changes = jax.tree_util.tree_map(
             lambda history: history[sample_indices], weight_history
         )
+        bp_weight_changes = jax.tree_util.tree_map(
+            lambda history: history[sample_indices], bp_weight_history
+        )
         return (
             new_synaptic_weights, 
             new_parameters, 
             new_rnn, 
             metaOptimizer
-        ), (y, tracked_chemicals, scaler_error, correct_class_probability, weight_changes)
+        ), (y, tracked_chemicals, scaler_error, correct_class_probability, weight_changes, bp_weight_changes)
 
         
     def inner_loop_per_image_no_update(self, carry, input):
@@ -250,7 +265,7 @@ class JaxMetaLearnerRNN:
 
         (new_synaptic_weights, new_parameters, new_rnn, _), (
             y, tracked_chemicals, scaler_error, correct_class_probability,
-            weight_changes
+            weight_changes, bp_weight_changes
         ) = jax.lax.scan(
             self.full_inner_loop,
             carry_init,
@@ -271,7 +286,7 @@ class JaxMetaLearnerRNN:
         avg_loss = jnp.mean(losses)
         acc = accuracy(qry_predictions, query_labels, use_jax=True)
 
-        return avg_loss, acc, tracked_chemicals, scaler_error, correct_class_probability, weight_changes
+        return avg_loss, acc, tracked_chemicals, scaler_error, correct_class_probability, weight_changes, bp_weight_changes
 
     @eqx.filter_jit
     def make_step(
@@ -286,11 +301,11 @@ class JaxMetaLearnerRNN:
         y_qry,
     ):
 
-        loss, acc, tracked_chemicals, scaler_error, correct_class_probability, weight_changes = self.compute_meta_loss(
+        loss, acc, tracked_chemicals, scaler_error, correct_class_probability, weight_changes, bp_weight_changes = self.compute_meta_loss(
             metaOptimizer, synaptic_weights_tuple, rnn_layers, rnn, x_trn, y_trn, x_qry, y_qry
         )
 
-        return loss, acc, tracked_chemicals, scaler_error, correct_class_probability, weight_changes
+        return loss, acc, tracked_chemicals, scaler_error, correct_class_probability, weight_changes, bp_weight_changes
 
 
     def train(self):
@@ -331,7 +346,7 @@ class JaxMetaLearnerRNN:
            )
 
         # -- meta-optimization --
-           loss, acc, tracked_chemicals, scaler_error, correct_class_probability, weight_changes = self.make_step(
+           loss, acc, tracked_chemicals, scaler_error, correct_class_probability, weight_changes, bp_weight_changes = self.make_step(
                self.metaOptimizer,
                self.synaptic_weights,
                self.rnn.layers,
@@ -368,6 +383,18 @@ class JaxMetaLearnerRNN:
                    os.path.join(self.result_directory, f"weight_changes_episode_{eps + 1:04d}_layer_shapes.npy"),
                    layer_shapes,
                )
+               bp_layer_changes = [np.asarray(layer_history[0]) for layer_history in bp_weight_changes]
+               max_bp_inputs = max(array.shape[1] for array in bp_layer_changes)
+               max_bp_outputs = max(array.shape[2] for array in bp_layer_changes)
+               saved_bp_weight_changes = np.zeros(
+                   (len(bp_layer_changes), bp_layer_changes[0].shape[0], max_bp_inputs, max_bp_outputs),
+                   dtype=bp_layer_changes[0].dtype,
+               )
+               bp_layer_shapes = np.asarray([array.shape[1:] for array in bp_layer_changes], dtype=np.int32)
+               for layer_index, array in enumerate(bp_layer_changes):
+                   saved_bp_weight_changes[layer_index, :, : array.shape[1], : array.shape[2]] = array
+               np.save(os.path.join(self.result_directory, f"bp_weight_changes_episode_{eps + 1:04d}.npy"), saved_bp_weight_changes)
+               np.save(os.path.join(self.result_directory, f"bp_weight_changes_episode_{eps + 1:04d}_layer_shapes.npy"), bp_layer_shapes)
            self.weight_changes = tuple(layer_history[0] for layer_history in weight_changes)
 
            line = "Runner Episode: {}\tLoss: {:.6f}\tAccuracy: {:.3f}\tTraining/Class: {}".format(
@@ -562,6 +589,51 @@ def jax_runner(index: int, result_subdirectory: str, modelPath: str):
     )
 
     metalearning_model.train()
+
+
+
+import jax
+import jax.numpy as jnp
+import equinox as eqx
+
+
+#Lisa added this
+def compute_bp_delta_w(rnn, x_image, y_label, learning_rate=0.01):
+    """
+    Computes the weight change matrix Delta W that standard Backpropagation 
+    would prescribe for all layers given the current image and label.
+    """
+    # inner_loop_per_image already one-hot encodes labels before calling this
+    # function; support integer labels too for standalone use.
+    num_classes = rnn.forward5.out_features
+    if y_label.ndim > 0 and y_label.shape[-1] == num_classes:
+        y_one_hot = y_label
+    else:
+        y_one_hot = jax.nn.one_hot(y_label, num_classes=num_classes)
+
+    # 2. Define standard Cross-Entropy Loss function with respect to model weights
+    def loss_fn(model):
+        # Use logits directly; this bypasses the network's feedback error path.
+        y_pred, _, _, _, _ = model(x_image, None, None)
+        return jnp.sum(optax.safe_softmax_cross_entropy(y_pred, y_one_hot))
+
+    # 3. Compute BP gradients w.r.t the trainable layer parameters using jax.grad
+    # eqx.filter_grad ensures JAX only differentiates w.r.t floating point array weights
+    grads = eqx.filter_grad(loss_fn)(rnn)
+
+    # The forward pass reads forward1..forward5 directly. Differentiate those
+    # fields rather than the `layers` convenience tuple, which is a separate
+    # tree path and can contain zero cotangents despite referring to the same
+    # layer objects at construction time.
+    forward_layers = (
+        grads.forward1,
+        grads.forward2,
+        grads.forward3,
+        grads.forward4,
+        grads.forward5,
+    )
+    # Saved matrices use (input, output), matching the chemical update history.
+    return tuple(-learning_rate * layer.weight.T for layer in forward_layers)
 
 
 def main_jax_runner():
