@@ -800,7 +800,7 @@ def main_jax_rnn_meta_learner():
             # device = "cpu"
             current_dir = os.getcwd()
             continue_training = (
-                current_dir + "/results_4/Jax_rnn_fixed_28/20260603-160027" #"/results_4/mode_9_scalar_converted_13_chems"
+                current_dir + "/results_4/Jax_rnn_fixed_28/20261119" #"/results_4/mode_9_scalar_converted_13_chems"
                 #+ "/results_4/jax_rnn_fixed_7/20260525-021101"
                 #+ "/results_4/jax_rnn_fixed_7/20260525-021204"
                 #current_dir + "/results_4/mode_9_rand_converted"
@@ -811,7 +811,7 @@ def main_jax_rnn_meta_learner():
             metaLearnerOptions = JaxRnnMetaLearnerOptions(
                 seed=42,
                 save_results=True,
-                results_subdir="Jax_random_architectures",
+                results_subdir="Nov26first",
                 metatrain_dataset=dataset_name,
                 display=True,
                 metaLearningRate=0.001,
@@ -833,24 +833,28 @@ def main_jax_rnn_meta_learner():
                 load_model=continue_training,
                 load_optimizer=False,
                 dont_load_z_y=False,
-                error_type=JaxErrorTypeEnum.DFA,
+                #I changed this to DSEF from DFA
+                error_type=JaxErrorTypeEnum.DSEF,
                 low_dim_DFA=-1,
                 two_layer_RNN=False,
-                feedforward=False,
+                #I changed this to true
+                feedforward=True,
                 meta_optimizer=JaxMetaOptimizerEnum.Adam,
                 optimizer_mode=JaxOptimizerModeEnum.BPTT,
                 sofo_samples=65,
                 sofo_damping=1e-6,
                 sofo_identity_sampling=False,
                 batch_size=batch_size,
-                random_architectures=True,
+                #I changed this to false
+                random_architectures=False,
             )
 
             metalearning_model = JaxMetaLearnerRNN(
                 modelOptions=modelOptions,
                 jaxMetaLearnerOptions=metaLearnerOptions,
                 key=key,
-                numberOfChemicals=5,
+                #I changed this to 13
+                numberOfChemicals=13,
                 metaTrainingDataset=metatrain_dataset,
             )
 
