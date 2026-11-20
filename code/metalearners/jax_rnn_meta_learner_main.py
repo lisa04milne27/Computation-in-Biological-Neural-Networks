@@ -49,6 +49,7 @@ class JaxMetaLearnerRNN:
         rnn_keys = jax.random.split(key1, num=self.jaxMetaLearnerOptions.batch_size)
         self.key2_split = jax.random.split(key2, num=self.jaxMetaLearnerOptions.batch_size)
         self.key3 = key3
+        self.freeze_after_step = 0
 
         if self.jaxMetaLearnerOptions.random_architectures:
             self.rnn_rnns = jax.vmap(lambda k: JAXChemicalRNN(
@@ -228,12 +229,13 @@ class JaxMetaLearnerRNN:
         return tuple(synaptic_weights)
 
     def inner_loop_per_image(self, carry, input):
-        synaptic_weights, parameters, rnn, hidden_state, metaOptimizer = carry
+        synaptic_weights, parameters, rnn, hidden_state, metaOptimizer, step_idx = carry
         x, labels = input
 
         if self.jaxMetaLearnerOptions.dataset_name != "ADDBERNOULLI":
             labels = jax.nn.one_hot(labels, num_classes=self.jaxMetaLearnerOptions.output_size)
 
+        # Keep the 4-element return signature of JAXFeedforwardNN / JAXChemicalRNN
         y, hidden_state, activations_arr, errors_arr = rnn(x, hidden_state, labels)
 
         def update_layer(w, p, act, err):
@@ -243,62 +245,65 @@ class JaxMetaLearnerRNN:
         errors_arr = tuple(errors_arr)
 
         results = jax.tree_util.tree_map(update_layer, synaptic_weights, parameters, activations_arr, errors_arr)
-        new_parameters = tuple(res[0] for res in results)
-        new_synaptic_weights = tuple(res[1] for res in results)
+        computed_parameters = tuple(res[0] for res in results)
+        computed_synaptic_weights = tuple(res[1] for res in results)
+
+        # Freeze layers 0..3 once `step_idx >= self.freeze_after_step`; keep layer 4 plastic
+        should_freeze = step_idx >= self.freeze_after_step
+
+        def apply_freeze(old_tuple, new_tuple):
+            frozen_prefix = jax.lax.cond(
+                should_freeze,
+                lambda: old_tuple[:-1],
+                lambda: new_tuple[:-1],
+            )
+            return frozen_prefix + (new_tuple[-1],)
+
+        new_parameters = apply_freeze(parameters, computed_parameters)
+        new_synaptic_weights = apply_freeze(synaptic_weights, computed_synaptic_weights)
 
         num_layers = len(new_parameters)
-
-        # Dynamically fetch (r.forward1, r.forward2, ...) and pair them with new_parameters
         new_rnn = eqx.tree_at(
             lambda r: (r.layers, *(getattr(r, f"forward{i+1}") for i in range(num_layers))),
             rnn,
             (new_parameters, *new_parameters),
         )
-        
+
         return (
             new_synaptic_weights,
             new_parameters,
             new_rnn,
             hidden_state,
             metaOptimizer,
+            step_idx + 1,
         ), y
 
     def full_inner_loop(self, carry, input) -> jnp.ndarray:
-        synaptic_weights, parameters, rnn, metaOptimizer = carry
-        
+        synaptic_weights, parameters, rnn, metaOptimizer, step_idx = carry
         hidden_state = rnn.initialise_hidden_state(batch_size=1)
 
         x, label = input
 
         if self.jaxMetaLearnerOptions.dataset_name == "ADDBERNOULLI":
-            x = jnp.reshape(x, (x.shape[0], -1))  # (time_steps, input_size)
-        elif (
-            self.jaxMetaLearnerOptions.dataset_name == "IMDB"
-            or self.jaxMetaLearnerOptions.dataset_name == "IMDB_WORD2VEC"
-        ):
-            pass
-        else:
-            x = jnp.reshape(x, (self.jaxMetaLearnerOptions.number_of_time_steps, -1))  # (time_steps, input_size)
-
-        if self.jaxMetaLearnerOptions.dataset_name == "ADDBERNOULLI":
-            label = jnp.reshape(label, (label.shape[0], -1))  # (time_steps, output_size)
+            x = jnp.reshape(x, (x.shape[0], -1))
+            label = jnp.reshape(label, (label.shape[0], -1))
         elif (
             self.jaxMetaLearnerOptions.dataset_name == "IMDB"
             or self.jaxMetaLearnerOptions.dataset_name == "IMDB_WORD2VEC"
         ):
             label = jnp.repeat(label, repeats=x.shape[0], axis=0)
         else:
-            label = jnp.repeat(
-                label, repeats=self.jaxMetaLearnerOptions.number_of_time_steps, axis=0
-            )  # (time_steps, output_size)
+            x = jnp.reshape(x, (self.jaxMetaLearnerOptions.number_of_time_steps, -1))
+            label = jnp.repeat(label, repeats=self.jaxMetaLearnerOptions.number_of_time_steps, axis=0)
 
-        (new_synaptic_weights, new_parameters, new_rnn, hidden_state, metaOptimizer), y = jax.lax.scan(
+        (new_synaptic_weights, new_parameters, new_rnn, hidden_state, metaOptimizer, new_step_idx), y = jax.lax.scan(
             self.inner_loop_per_image,
-            (synaptic_weights, parameters, rnn, hidden_state, metaOptimizer),
+            (synaptic_weights, parameters, rnn, hidden_state, metaOptimizer, step_idx),
             (x, label),
         )
 
-        return (new_synaptic_weights, new_parameters, new_rnn, metaOptimizer), (y, hidden_state)
+        return (new_synaptic_weights, new_parameters, new_rnn, metaOptimizer, new_step_idx), (y, hidden_state)
+
 
     def inner_loop_per_image_no_update(self, carry, input):
         hidden_state, rnn = carry
@@ -363,9 +368,10 @@ class JaxMetaLearnerRNN:
             parameters_tuple,
             rnn,
             metaOptimizer,
+            jnp.array(0, dtype=jnp.int32),
         )
 
-        (new_synaptic_weights, new_parameters, new_rnn, _), (y, current_hidden_state) = jax.lax.scan(
+        (new_synaptic_weights, new_parameters, new_rnn, _, _), (y, current_hidden_state) = jax.lax.scan(
             checkpointed_inner_loop,
             carry_init,
             (x_trn, y_trn),
@@ -706,7 +712,7 @@ def main_jax_rnn_meta_learner():
     #initialise_tracking()
     #jax.config.update("jax_debug_nans", True)
     key = jax.random.PRNGKey(42)
-    outer_location = os.getcwd() + r"/results_4/mode_9_scalar_converted_13_chems_extended_full_sweep"
+    outer_location = os.getcwd() + r"/results_4/2026119unsure"
     tau_mins = os.listdir(outer_location)
     tau_mins = tau_mins[8:]  # skip the first one which is tau_min=1
     for tau_min in tau_mins:
@@ -720,7 +726,9 @@ def main_jax_rnn_meta_learner():
 
             # -- load data
             numWorkers = 2
-            epochs = 5000
+            #epochs = 5000
+            #Just testing!
+            epochs=5
 
             dataset_name = "EMNIST"
             minTrainingDataPerClass = 5
@@ -830,7 +838,8 @@ def main_jax_rnn_meta_learner():
                 outer_activation=JaxActivationNonLinearEnum.tanh,
                 recurrent_activation=JaxActivationNonLinearEnum.softplus,
                 number_of_time_steps=numberOfTimeSteps,
-                load_model=continue_training,
+                #load_model=continue_training,
+                load_model=None
                 load_optimizer=False,
                 dont_load_z_y=False,
                 #I changed this to DSEF from DFA
