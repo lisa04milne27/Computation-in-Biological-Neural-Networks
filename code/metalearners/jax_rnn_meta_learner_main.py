@@ -726,9 +726,9 @@ def main_jax_rnn_meta_learner():
 
             # -- load data
     numWorkers = 2
-            #epochs = 5000
+    epochs = 5000
             #Just testing!
-    epochs=5
+    #epochs=5
 
     dataset_name = "EMNIST"
     minTrainingDataPerClass = 5
