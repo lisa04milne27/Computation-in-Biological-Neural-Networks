@@ -49,7 +49,8 @@ class JaxMetaLearnerRNN:
         rnn_keys = jax.random.split(key1, num=self.jaxMetaLearnerOptions.batch_size)
         self.key2_split = jax.random.split(key2, num=self.jaxMetaLearnerOptions.batch_size)
         self.key3 = key3
-        self.freeze_after_step = 0
+        self.freeze_after_step=2**31 - 1
+        #self.freeze_after_step = 0
 
         if self.jaxMetaLearnerOptions.random_architectures:
             self.rnn_rnns = jax.vmap(lambda k: JAXChemicalRNN(
