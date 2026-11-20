@@ -712,161 +712,165 @@ def main_jax_rnn_meta_learner():
     #initialise_tracking()
     #jax.config.update("jax_debug_nans", True)
     key = jax.random.PRNGKey(42)
-    outer_location = os.getcwd() + r"/results_4/2026119unsure"
-    tau_mins = os.listdir(outer_location)
-    tau_mins = tau_mins[8:]  # skip the first one which is tau_min=1
-    for tau_min in tau_mins:
-        tau_min_location = os.path.join(outer_location, tau_min)
-        tau_maxs = os.listdir(tau_min_location)
-        for tau_max in tau_maxs:
-            full_location = os.path.join(tau_min_location, tau_max)
+    #outer_location = os.getcwd() + r"/results_4/2026119unsure"
+    #tau_mins = os.listdir(outer_location)
+    #tau_mins = tau_mins[8:]  # skip the first one which is tau_min=1
+    #for tau_min in tau_mins:
+        #tau_min_location = os.path.join(outer_location, tau_min)
+        #tau_maxs = os.listdir(tau_min_location)
+        #for tau_max in tau_maxs:
+            #full_location = os.path.join(tau_min_location, tau_max)
     
             
             # jax.config.update("jax_enable_x64", False)
 
             # -- load data
-            numWorkers = 2
+    numWorkers = 2
             #epochs = 5000
             #Just testing!
-            epochs=5
+    epochs=5
 
-            dataset_name = "EMNIST"
-            minTrainingDataPerClass = 5
-            maxTrainingDataPerClass = 70
-            queryDataPerClass = 20
-            numberOfTimeSteps = 28
-            batch_size = 1
+    dataset_name = "EMNIST"
+    minTrainingDataPerClass = 5
+    maxTrainingDataPerClass = 70
+    queryDataPerClass = 20
+    numberOfTimeSteps = 28
+    batch_size = 1
 
-            if dataset_name == "EMNIST":
-                numberOfClasses = 5
-                dataset = EmnistDataset(
-                    minTrainingDataPerClass=minTrainingDataPerClass,
-                    maxTrainingDataPerClass=maxTrainingDataPerClass,
-                    queryDataPerClass=queryDataPerClass,
-                    dimensionOfImage=28,
-                    use_jax=True,
+    if dataset_name == "EMNIST":
+        numberOfClasses = 5
+        dataset = EmnistDataset(
+            minTrainingDataPerClass=minTrainingDataPerClass,
+            maxTrainingDataPerClass=maxTrainingDataPerClass,
+            queryDataPerClass=queryDataPerClass,
+            dimensionOfImage=28,
+            use_jax=True,
                 )
-                dimOut = 47
-                dimIn = int(28 * 28 / numberOfTimeSteps)
-            elif dataset_name == "ADDBERNOULLI":
-                queryDataPerClass = 50
-                dataset = AddBernoulliTaskDataset(
-                    minSequenceLength=minTrainingDataPerClass,
-                    maxSequenceLength=maxTrainingDataPerClass,
-                    querySequenceLength=50,
-                )
-                dimOut = 2
-                dimIn = 2
-                numberOfClasses = 1
-            elif dataset_name == "IMDB":
-                numberOfClasses = 2
-                dimOut = 2
-                queryDataPerClass = 10
-                dataset = IMDBMetaDataset(
-                    minNumberOfSequences=minTrainingDataPerClass,
-                    maxNumberOfSequences=maxTrainingDataPerClass,
-                    query_q=queryDataPerClass,
-                    max_seq_len=200,
-                )
-                numWorkers = 0
-                dimIn = 768
-            elif dataset_name == "IMDB_WORD2VEC":
-                numberOfClasses = 2
-                dimOut = 4
-                queryDataPerClass = 10
-                dataset = IMDBWord2VecMetaDataset(
-                    minNumberOfSequences=minTrainingDataPerClass,
-                    maxNumberOfSequences=maxTrainingDataPerClass,
-                    query_q=queryDataPerClass,
-                    max_seq_len=200,
-                )
-                numWorkers = 0
-                dimIn = 300
-
-            sampler = RandomSampler(data_source=dataset, replacement=True, num_samples=epochs * numberOfClasses * batch_size)
-            metatrain_dataset = DataLoader(
-                dataset=dataset,
-                sampler=sampler,
-                batch_size=numberOfClasses * batch_size,
-                drop_last=True,
-                num_workers=numWorkers,
-                persistent_workers=False,
+        dimOut = 47
+        dimIn = int(28 * 28 / numberOfTimeSteps)
+    elif dataset_name == "ADDBERNOULLI":
+        queryDataPerClass = 50
+        dataset = AddBernoulliTaskDataset(
+            minSequenceLength=minTrainingDataPerClass,
+            maxSequenceLength=maxTrainingDataPerClass,
+            querySequenceLength=50,
+        )
+        dimOut = 2
+        dimIn = 2
+        numberOfClasses = 1
+    elif dataset_name == "IMDB":
+        numberOfClasses = 2
+        dimOut = 2
+        queryDataPerClass = 10
+        dataset = IMDBMetaDataset(
+            minNumberOfSequences=minTrainingDataPerClass,
+            maxNumberOfSequences=maxTrainingDataPerClass,
+            query_q=queryDataPerClass,
+            max_seq_len=200,
+        )
+        numWorkers = 0
+        dimIn = 768
+    elif dataset_name == "IMDB_WORD2VEC":
+        numberOfClasses = 2
+        dimOut = 4
+        queryDataPerClass = 10
+        dataset = IMDBWord2VecMetaDataset(
+            minNumberOfSequences=minTrainingDataPerClass,
+            maxNumberOfSequences=maxTrainingDataPerClass,
+            query_q=queryDataPerClass,
+            max_seq_len=200,
             )
+        numWorkers = 0
+        dimIn = 300
 
-            # -- options
-            modelOptions = None
-            modelOptions = fastRnnOptions(
-                nonLinear=JaxActivationNonLinearEnum.tanh,
-                update_rules=[0, 1, 2, 4, 9, 12],  # 4
-                minSlowTau=int(tau_min),
-                maxSlowTau=int(tau_max),
-                y_vector=yVectorEnum.none,
-                z_vector=zVectorEnum.default,
-                operator=operatorEnum.mode_9,
-            )
+    sampler = RandomSampler(data_source=dataset, replacement=True, num_samples=epochs * numberOfClasses * batch_size)
+    metatrain_dataset = DataLoader(
+        dataset=dataset,
+        sampler=sampler,
+        batch_size=numberOfClasses * batch_size,
+        drop_last=True,
+        num_workers=numWorkers,
+        persistent_workers=False,
+        )
+
+
+
+    # -- options
+    tau_min = 1
+    tau_max = 28
+    modelOptions = None
+    modelOptions = fastRnnOptions(
+        nonLinear=JaxActivationNonLinearEnum.tanh,
+        update_rules=[0, 1, 2, 4, 9, 12],  # 4
+        minSlowTau=int(tau_min),
+        maxSlowTau=int(tau_max),
+        y_vector=yVectorEnum.none,
+        z_vector=zVectorEnum.default,
+        operator=operatorEnum.mode_9,
+    )
             
-            # device = "cpu"
-            current_dir = os.getcwd()
-            continue_training = (
-                current_dir + "/results_4/Jax_rnn_fixed_28/20261119" #"/results_4/mode_9_scalar_converted_13_chems"
-                #+ "/results_4/jax_rnn_fixed_7/20260525-021101"
-                #+ "/results_4/jax_rnn_fixed_7/20260525-021204"
-                #current_dir + "/results_4/mode_9_rand_converted"
-                #+ "/results_3/jax_rnn_1_chem/20260423-005009"
-                #+ "/results_3/jax_rnn_9_chems_100/20260422-175900"
-            )  # "/results_2/jax_rnn_7_DSEF_fixed/20260217-174916" # "/results_2/jax_rnn_12/20260121-024411"#"/results_2/jax_rnn_12_28/20260126-043934"
-            # -- meta-learner options
-            metaLearnerOptions = JaxRnnMetaLearnerOptions(
-                seed=42,
-                save_results=True,
-                results_subdir="Nov26first",
-                metatrain_dataset=dataset_name,
-                display=True,
-                metaLearningRate=0.001,
-                numberOfClasses=numberOfClasses,
-                dataset_name=dataset_name,
-                chemicalInitialization=chemicalEnum.same,
-                minTrainingDataPerClass=minTrainingDataPerClass,
-                maxTrainingDataPerClass=maxTrainingDataPerClass,
-                queryDataPerClass=queryDataPerClass,
-                input_size=dimIn,
-                hidden_size=128,
-                output_size=dimOut,
-                biological_min_tau=1,
-                biological_max_tau=28,
-                gradient=True,
-                outer_activation=JaxActivationNonLinearEnum.tanh,
-                recurrent_activation=JaxActivationNonLinearEnum.softplus,
-                number_of_time_steps=numberOfTimeSteps,
-                #load_model=continue_training,
-                load_model=None,
-                load_optimizer=False,
-                dont_load_z_y=False,
-                #I changed this to DSEF from DFA
-                error_type=JaxErrorTypeEnum.DSEF,
-                low_dim_DFA=-1,
-                two_layer_RNN=False,
-                #I changed this to true
-                feedforward=True,
-                meta_optimizer=JaxMetaOptimizerEnum.Adam,
-                optimizer_mode=JaxOptimizerModeEnum.BPTT,
-                sofo_samples=65,
-                sofo_damping=1e-6,
-                sofo_identity_sampling=False,
-                batch_size=batch_size,
-                #I changed this to false
-                random_architectures=False,
+    # device = "cpu"
+    current_dir = os.getcwd()
+    continue_training = (
+        current_dir + "/results_4/Jax_rnn_fixed_28/20261119" #"/results_4/mode_9_scalar_converted_13_chems"
+        #+ "/results_4/jax_rnn_fixed_7/20260525-021101"
+        #+ "/results_4/jax_rnn_fixed_7/20260525-021204"
+        #current_dir + "/results_4/mode_9_rand_converted"
+        #+ "/results_3/jax_rnn_1_chem/20260423-005009"
+        #+ "/results_3/jax_rnn_9_chems_100/20260422-175900"
+    )  # "/results_2/jax_rnn_7_DSEF_fixed/20260217-174916" # "/results_2/jax_rnn_12/20260121-024411"#"/results_2/jax_rnn_12_28/20260126-043934"
+    # -- meta-learner options
+    metaLearnerOptions = JaxRnnMetaLearnerOptions(
+        seed=42,
+        save_results=True,
+        results_subdir="Nov26first",
+        metatrain_dataset=dataset_name,
+        display=True,
+        metaLearningRate=0.001,
+        numberOfClasses=numberOfClasses,
+        dataset_name=dataset_name,
+        chemicalInitialization=chemicalEnum.same,
+        minTrainingDataPerClass=minTrainingDataPerClass,
+        maxTrainingDataPerClass=maxTrainingDataPerClass,
+        queryDataPerClass=queryDataPerClass,
+        input_size=dimIn,
+        hidden_size=128,
+        output_size=dimOut,
+        biological_min_tau=1,
+        biological_max_tau=28,
+        gradient=True,
+        outer_activation=JaxActivationNonLinearEnum.tanh,
+        recurrent_activation=JaxActivationNonLinearEnum.softplus,
+        number_of_time_steps=numberOfTimeSteps,
+        #load_model=continue_training,
+        load_model=None,
+        load_optimizer=False,
+        dont_load_z_y=False,
+        #I changed this to DSEF from DFA
+        error_type=JaxErrorTypeEnum.DSEF,
+        low_dim_DFA=-1,
+        two_layer_RNN=False,
+        #I changed this to true
+        feedforward=True,
+        meta_optimizer=JaxMetaOptimizerEnum.Adam,
+        optimizer_mode=JaxOptimizerModeEnum.BPTT,
+        sofo_samples=65,
+        sofo_damping=1e-6,
+        sofo_identity_sampling=False,
+        batch_size=batch_size,
+        #I changed this to false
+        random_architectures=False,
             )
 
-            metalearning_model = JaxMetaLearnerRNN(
-                modelOptions=modelOptions,
-                jaxMetaLearnerOptions=metaLearnerOptions,
-                key=key,
-                #I changed this to 13
-                numberOfChemicals=13,
-                metaTrainingDataset=metatrain_dataset,
-            )
+    metalearning_model = JaxMetaLearnerRNN(
+        modelOptions=modelOptions,
+        jaxMetaLearnerOptions=metaLearnerOptions,
+        key=key,
+        #I changed this to 13
+        numberOfChemicals=13,
+        metaTrainingDataset=metatrain_dataset,
+        )
 
-            metalearning_model.train()
-            exit()
+    metalearning_model.train()
+    exit()
           
