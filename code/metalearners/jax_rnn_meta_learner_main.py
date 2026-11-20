@@ -839,7 +839,7 @@ def main_jax_rnn_meta_learner():
                 recurrent_activation=JaxActivationNonLinearEnum.softplus,
                 number_of_time_steps=numberOfTimeSteps,
                 #load_model=continue_training,
-                load_model=None
+                load_model=None,
                 load_optimizer=False,
                 dont_load_z_y=False,
                 #I changed this to DSEF from DFA
