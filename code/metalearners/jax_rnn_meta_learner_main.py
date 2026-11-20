@@ -734,7 +734,8 @@ def main_jax_rnn_meta_learner():
     minTrainingDataPerClass = 5
     maxTrainingDataPerClass = 70
     queryDataPerClass = 20
-    numberOfTimeSteps = 28
+    numberOfTimeSteps = 1 #I changed it to this for a feedforward network
+    #numberOfTimeSteps = 28
     batch_size = 1
 
     if dataset_name == "EMNIST":
