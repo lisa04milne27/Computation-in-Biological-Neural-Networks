@@ -733,7 +733,7 @@ def main_jax_rnn_meta_learner():
 
     dataset_name = "EMNIST"
     minTrainingDataPerClass = 5
-    maxTrainingDataPerClass = 70
+    maxTrainingDataPerClass = 200
     queryDataPerClass = 20
     numberOfTimeSteps = 1 #I changed it to this for a feedforward network
     #numberOfTimeSteps = 28
@@ -799,7 +799,7 @@ def main_jax_rnn_meta_learner():
 
     # -- options
     tau_min = 1
-    tau_max = 28
+    tau_max = 700
     modelOptions = None
     modelOptions = fastRnnOptions(
         nonLinear=JaxActivationNonLinearEnum.tanh,
@@ -828,10 +828,10 @@ def main_jax_rnn_meta_learner():
         results_subdir="Nov26first",
         metatrain_dataset=dataset_name,
         display=True,
-        metaLearningRate=0.001,
+        metaLearningRate=0.0003,
         numberOfClasses=numberOfClasses,
         dataset_name=dataset_name,
-        chemicalInitialization=chemicalEnum.same,
+        chemicalInitialization=chemicalEnum.different,
         minTrainingDataPerClass=minTrainingDataPerClass,
         maxTrainingDataPerClass=maxTrainingDataPerClass,
         queryDataPerClass=queryDataPerClass,
@@ -839,7 +839,7 @@ def main_jax_rnn_meta_learner():
         hidden_size=128,
         output_size=dimOut,
         biological_min_tau=1,
-        biological_max_tau=28,
+        biological_max_tau=7,
         gradient=True,
         outer_activation=JaxActivationNonLinearEnum.tanh,
         recurrent_activation=JaxActivationNonLinearEnum.softplus,
